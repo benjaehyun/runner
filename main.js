@@ -1,29 +1,30 @@
 // Game constants
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 400;
-const GRAVITY = 0.5;
-const JUMP_STRENGTH = 12;
-const OBSTACLE_SPEED = 3;
-const CHARACTER_WIDTH = 40;
-const CHARACTER_HEIGHT = 40;
-const MIN_OBSTACLE_DISTANCE = 200;
-const MAX_OBSTACLE_HEIGHT = 80;
+const BASE_WIDTH = 800;
+const BASE_HEIGHT = 400;
+let SCALE_FACTOR = 1;
+let UI_SCALE_FACTOR = 1;
+const GRAVITY = 0.4;
+const JUMP_STRENGTH = 10;
+const OBSTACLE_SPEED = 4;
+const CHARACTER_WIDTH = 30;
+const CHARACTER_HEIGHT = 30;
+const MIN_OBSTACLE_DISTANCE = 300;
+const MAX_OBSTACLE_HEIGHT = 60;
 const MIN_OBSTACLE_HEIGHT = 20;
-const OBSTACLE_WIDTH = 30;
+const OBSTACLE_WIDTH = 20;
 
 // Game variables
 let canvas, ctx;
 let score, highScore;
 let isJumping, canDoubleJump;
-// let gameLoop;
 let lastTime = 0;
 let lastObstaclePosition = 0;
-let gameState = 'START'; // Can be 'START', 'PLAYING', or 'GAME_OVER'
+let gameState = 'START';
 
 // Character object
 const character = {
     x: 50,
-    y: CANVAS_HEIGHT - CHARACTER_HEIGHT,
+    y: BASE_HEIGHT - CHARACTER_HEIGHT,
     width: CHARACTER_WIDTH,
     height: CHARACTER_HEIGHT,
     velocityY: 0,
@@ -39,12 +40,12 @@ const character = {
         }
     },
     
-    update() {
+    update(deltaTime) {
         this.velocityY += GRAVITY;
-        this.y += this.velocityY;
+        this.y += this.velocityY * (deltaTime / 16); // Normalize for 60 FPS
         
-        if (this.y > CANVAS_HEIGHT - this.height) {
-            this.y = CANVAS_HEIGHT - this.height;
+        if (this.y > BASE_HEIGHT - this.height) {
+            this.y = BASE_HEIGHT - this.height;
             this.velocityY = 0;
             isJumping = false;
         }
@@ -62,27 +63,27 @@ const obstacles = {
     
     generate() {
         const lastObstacle = this.list[this.list.length - 1];
-        const minDistance = lastObstacle ? lastObstacle.x + MIN_OBSTACLE_DISTANCE : CANVAS_WIDTH;
+        const minDistance = lastObstacle ? lastObstacle.x + MIN_OBSTACLE_DISTANCE : BASE_WIDTH;
         
-        if (minDistance <= CANVAS_WIDTH) {
+        if (minDistance <= BASE_WIDTH) {
             const height = Math.floor(Math.random() * (MAX_OBSTACLE_HEIGHT - MIN_OBSTACLE_HEIGHT + 1)) + MIN_OBSTACLE_HEIGHT;
             this.list.push({
-                x: CANVAS_WIDTH,
-                y: CANVAS_HEIGHT - height,
+                x: BASE_WIDTH,
+                y: BASE_HEIGHT - height,
                 width: OBSTACLE_WIDTH,
                 height: height
             });
-            lastObstaclePosition = CANVAS_WIDTH;
+            lastObstaclePosition = BASE_WIDTH;
         }
     },
     
-    update() {
+    update(deltaTime) {
         this.list.forEach(obstacle => {
-            obstacle.x -= OBSTACLE_SPEED;
+            obstacle.x -= OBSTACLE_SPEED * (deltaTime / 16); // Normalize for 60 FPS
         });
         this.list = this.list.filter(obstacle => obstacle.x > -obstacle.width);
         
-        if (this.list.length === 0 || lastObstaclePosition <= CANVAS_WIDTH - MIN_OBSTACLE_DISTANCE) {
+        if (this.list.length === 0 || lastObstaclePosition <= BASE_WIDTH - MIN_OBSTACLE_DISTANCE) {
             this.generate();
         }
     },
@@ -95,16 +96,29 @@ const obstacles = {
     }
 };
 
+function setScaleFactor() {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const scaleX = windowWidth / BASE_WIDTH;
+    const scaleY = windowHeight / BASE_HEIGHT;
+    SCALE_FACTOR = Math.min(scaleX, scaleY);
+    UI_SCALE_FACTOR = Math.min(1, SCALE_FACTOR);
+
+    canvas.width = BASE_WIDTH * SCALE_FACTOR;
+    canvas.height = BASE_HEIGHT * SCALE_FACTOR;
+    ctx.scale(SCALE_FACTOR, SCALE_FACTOR);
+}
+
 function init() {
     canvas = document.getElementById('gameCanvas');
     ctx = canvas.getContext('2d');
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
+    setScaleFactor();
     
     highScore = localStorage.getItem('highScore') || 0;
     updateScoreDisplay();
     
     document.addEventListener('keydown', handleInput);
+    window.addEventListener('resize', setScaleFactor);
 }
 
 function handleInput(event) {
@@ -120,8 +134,8 @@ function handleInput(event) {
 function update(deltaTime) {
     if (gameState !== 'PLAYING') return;
 
-    character.update();
-    obstacles.update();
+    character.update(deltaTime);
+    obstacles.update(deltaTime);
     
     score += deltaTime / 1000; // Points per second
     updateScoreDisplay();
@@ -130,7 +144,7 @@ function update(deltaTime) {
 }
 
 function draw() {
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.clearRect(0, 0, BASE_WIDTH, BASE_HEIGHT);
 
     if (gameState === 'START') {
         drawStartScreen();
@@ -164,7 +178,7 @@ function gameOver() {
 function resetGame() {
     score = 0;
     obstacles.list = [];
-    character.y = CANVAS_HEIGHT - character.height;
+    character.y = BASE_HEIGHT - character.height;
     character.velocityY = 0;
     isJumping = false;
     canDoubleJump = false;
@@ -179,18 +193,18 @@ function updateScoreDisplay() {
 
 function drawStartScreen() {
     ctx.fillStyle = 'black';
-    ctx.font = '30px Arial';
+    ctx.font = `${24 * UI_SCALE_FACTOR}px Arial`;
     ctx.textAlign = 'center';
-    ctx.fillText('Press Spacebar to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    ctx.fillText('Press Spacebar to Start', BASE_WIDTH / 2, BASE_HEIGHT / 2);
 }
 
 function drawGameOverScreen() {
     ctx.fillStyle = 'black';
-    ctx.font = '30px Arial';
+    ctx.font = `${24 * UI_SCALE_FACTOR}px Arial`;
     ctx.textAlign = 'center';
-    ctx.fillText('Game Over', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 40);
-    ctx.fillText(`Score: ${Math.floor(score)}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-    ctx.fillText('Press Spacebar to Restart', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 40);
+    ctx.fillText('Game Over', BASE_WIDTH / 2, BASE_HEIGHT / 2 - 40);
+    ctx.fillText(`Score: ${Math.floor(score)}`, BASE_WIDTH / 2, BASE_HEIGHT / 2);
+    ctx.fillText('Press Spacebar to Restart', BASE_WIDTH / 2, BASE_HEIGHT / 2 + 40);
 }
 
 function gameLoop(currentTime) {
@@ -211,6 +225,7 @@ function startGame() {
 function initialize() {
     init();
     gameState = 'START';
+    lastTime = 0;
     requestAnimationFrame(gameLoop);
 }
 
