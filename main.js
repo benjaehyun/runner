@@ -3,13 +3,13 @@ const BASE_WIDTH = 800;
 const BASE_HEIGHT = 400;
 let SCALE_FACTOR = 1;
 let UI_SCALE_FACTOR = 1;
-const GRAVITY = 0.4;
-const JUMP_STRENGTH = 10;
-const OBSTACLE_SPEED = 4;
+const GRAVITY = 0.5;
+const JUMP_STRENGTH = 15;
+const OBSTACLE_SPEED = 7;
 const CHARACTER_WIDTH = 30;
 const CHARACTER_HEIGHT = 30;
-const MIN_OBSTACLE_DISTANCE = 300;
-const MAX_OBSTACLE_HEIGHT = 60;
+const MIN_OBSTACLE_DISTANCE = 250;
+const MAX_OBSTACLE_HEIGHT = 50;
 const MIN_OBSTACLE_HEIGHT = 20;
 const OBSTACLE_WIDTH = 20;
 
@@ -42,7 +42,7 @@ const character = {
     
     update(deltaTime) {
         this.velocityY += GRAVITY;
-        this.y += this.velocityY * (deltaTime / 16); // Normalize for 60 FPS
+        this.y += this.velocityY * (deltaTime / 16);
         
         if (this.y > BASE_HEIGHT - this.height) {
             this.y = BASE_HEIGHT - this.height;
@@ -66,7 +66,8 @@ const obstacles = {
         const minDistance = lastObstacle ? lastObstacle.x + MIN_OBSTACLE_DISTANCE : BASE_WIDTH;
         
         if (minDistance <= BASE_WIDTH) {
-            const height = Math.floor(Math.random() * (MAX_OBSTACLE_HEIGHT - MIN_OBSTACLE_HEIGHT + 1)) + MIN_OBSTACLE_HEIGHT;
+            const maxJumpableHeight = BASE_HEIGHT - character.height - (JUMP_STRENGTH * JUMP_STRENGTH) / (2 * GRAVITY);
+            const height = Math.floor(Math.random() * (Math.min(MAX_OBSTACLE_HEIGHT, maxJumpableHeight) - MIN_OBSTACLE_HEIGHT + 1)) + MIN_OBSTACLE_HEIGHT;
             this.list.push({
                 x: BASE_WIDTH,
                 y: BASE_HEIGHT - height,
@@ -79,7 +80,7 @@ const obstacles = {
     
     update(deltaTime) {
         this.list.forEach(obstacle => {
-            obstacle.x -= OBSTACLE_SPEED * (deltaTime / 16); // Normalize for 60 FPS
+            obstacle.x -= OBSTACLE_SPEED * (deltaTime / 16);
         });
         this.list = this.list.filter(obstacle => obstacle.x > -obstacle.width);
         
@@ -101,7 +102,7 @@ function setScaleFactor() {
     const windowHeight = window.innerHeight;
     const scaleX = windowWidth / BASE_WIDTH;
     const scaleY = windowHeight / BASE_HEIGHT;
-    SCALE_FACTOR = Math.min(scaleX, scaleY);
+    SCALE_FACTOR = Math.min(scaleX, scaleY, 1); // Limit to 1 to prevent enlargement
     UI_SCALE_FACTOR = Math.min(1, SCALE_FACTOR);
 
     canvas.width = BASE_WIDTH * SCALE_FACTOR;
@@ -128,6 +129,7 @@ function handleInput(event) {
         } else if (gameState === 'PLAYING') {
             character.jump();
         }
+        event.preventDefault(); // Prevent spacebar from scrolling the page
     }
 }
 
@@ -137,7 +139,7 @@ function update(deltaTime) {
     character.update(deltaTime);
     obstacles.update(deltaTime);
     
-    score += deltaTime / 1000; // Points per second
+    score += deltaTime / 1000;
     updateScoreDisplay();
     
     checkCollisions();
