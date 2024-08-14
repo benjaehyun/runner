@@ -3,9 +3,9 @@ const BASE_WIDTH = 800;
 const BASE_HEIGHT = 400;
 let SCALE_FACTOR = 1;
 let UI_SCALE_FACTOR = 1;
-const GRAVITY = 0.5;
-const JUMP_STRENGTH = 15;
-const OBSTACLE_SPEED = 7;
+const GRAVITY = 0.4;
+const JUMP_STRENGTH = 14;
+const OBSTACLE_SPEED = 5;
 const CHARACTER_WIDTH = 30;
 const CHARACTER_HEIGHT = 30;
 const MIN_OBSTACLE_DISTANCE = 250;
@@ -15,11 +15,12 @@ const OBSTACLE_WIDTH = 20;
 
 // Game variables
 let canvas, ctx;
-let score, highScore;
+let score, highScores;
 let isJumping, canDoubleJump;
 let lastTime = 0;
 let lastObstaclePosition = 0;
-let gameState = 'START';
+let gameState = 'MAIN_MENU';
+let currentMode = null;
 
 // Character object
 const character = {
@@ -102,7 +103,7 @@ function setScaleFactor() {
     const windowHeight = window.innerHeight;
     const scaleX = windowWidth / BASE_WIDTH;
     const scaleY = windowHeight / BASE_HEIGHT;
-    SCALE_FACTOR = Math.min(scaleX, scaleY, 1); // Limit to 1 to prevent enlargement
+    SCALE_FACTOR = Math.min(scaleX, scaleY, 1);
     UI_SCALE_FACTOR = Math.min(1, SCALE_FACTOR);
 
     canvas.width = BASE_WIDTH * SCALE_FACTOR;
@@ -115,21 +116,43 @@ function init() {
     ctx = canvas.getContext('2d');
     setScaleFactor();
     
-    highScore = localStorage.getItem('highScore') || 0;
+    highScores = {
+        marathon: parseInt(localStorage.getItem('highScoreMarathon')) || 0,
+        challenge: parseInt(localStorage.getItem('highScoreChallenge')) || 0
+    };
     updateScoreDisplay();
     
     document.addEventListener('keydown', handleInput);
+    canvas.addEventListener('click', handleClick);
     window.addEventListener('resize', setScaleFactor);
 }
 
 function handleInput(event) {
     if (event.code === 'Space') {
-        if (gameState === 'START' || gameState === 'GAME_OVER') {
-            startGame();
-        } else if (gameState === 'PLAYING') {
+        if (gameState === 'PLAYING') {
             character.jump();
+        } else if (gameState === 'GAME_OVER') {
+            startGame(currentMode);
         }
-        event.preventDefault(); // Prevent spacebar from scrolling the page
+        event.preventDefault();
+    }
+}
+
+function handleClick(event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / SCALE_FACTOR;
+    const y = (event.clientY - rect.top) / SCALE_FACTOR;
+
+    if (gameState === 'MAIN_MENU') {
+        if (x > 200 && x < 350 && y > 200 && y < 250) {
+            startGame('marathon');
+        } else if (x > 450 && x < 600 && y > 200 && y < 250) {
+            startGame('challenge');
+        }
+    } else if (gameState === 'GAME_OVER') {
+        if (x > 300 && x < 500 && y > 300 && y < 350) {
+            gameState = 'MAIN_MENU';
+        }
     }
 }
 
@@ -148,8 +171,8 @@ function update(deltaTime) {
 function draw() {
     ctx.clearRect(0, 0, BASE_WIDTH, BASE_HEIGHT);
 
-    if (gameState === 'START') {
-        drawStartScreen();
+    if (gameState === 'MAIN_MENU') {
+        drawMainMenu();
     } else if (gameState === 'PLAYING') {
         character.draw();
         obstacles.draw();
@@ -171,9 +194,9 @@ function checkCollisions() {
 
 function gameOver() {
     gameState = 'GAME_OVER';
-    if (score > highScore) {
-        highScore = score;
-        localStorage.setItem('highScore', highScore);
+    if (score > highScores[currentMode]) {
+        highScores[currentMode] = Math.floor(score);
+        localStorage.setItem(`highScore${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}`, highScores[currentMode]);
     }
 }
 
@@ -190,23 +213,45 @@ function resetGame() {
 
 function updateScoreDisplay() {
     document.getElementById('scoreValue').textContent = Math.floor(score);
-    document.getElementById('highScoreValue').textContent = Math.floor(highScore);
+    document.getElementById('highScoreMarathon').textContent = highScores.marathon;
+    document.getElementById('highScoreChallenge').textContent = highScores.challenge;
 }
 
-function drawStartScreen() {
+function drawMainMenu() {
     ctx.fillStyle = 'black';
-    ctx.font = `${24 * UI_SCALE_FACTOR}px Arial`;
+    ctx.font = `${30 * UI_SCALE_FACTOR}px Arial`;
     ctx.textAlign = 'center';
-    ctx.fillText('Press Spacebar to Start', BASE_WIDTH / 2, BASE_HEIGHT / 2);
+    ctx.fillText('Choose Game Mode', BASE_WIDTH / 2, 100);
+
+    ctx.fillStyle = 'blue';
+    ctx.fillRect(200, 200, 150, 50);
+    ctx.fillRect(450, 200, 150, 50);
+
+    ctx.fillStyle = 'white';
+    ctx.font = `${20 * UI_SCALE_FACTOR}px Arial`;
+    ctx.fillText('Marathon', 275, 230);
+    ctx.fillText('Challenge', 525, 230);
+
+    ctx.fillStyle = 'black';
+    ctx.font = `${16 * UI_SCALE_FACTOR}px Arial`;
+    ctx.fillText(`High Score: ${highScores.marathon}`, 275, 280);
+    ctx.fillText(`High Score: ${highScores.challenge}`, 525, 280);
 }
 
 function drawGameOverScreen() {
     ctx.fillStyle = 'black';
-    ctx.font = `${24 * UI_SCALE_FACTOR}px Arial`;
+    ctx.font = `${30 * UI_SCALE_FACTOR}px Arial`;
     ctx.textAlign = 'center';
-    ctx.fillText('Game Over', BASE_WIDTH / 2, BASE_HEIGHT / 2 - 40);
-    ctx.fillText(`Score: ${Math.floor(score)}`, BASE_WIDTH / 2, BASE_HEIGHT / 2);
-    ctx.fillText('Press Spacebar to Restart', BASE_WIDTH / 2, BASE_HEIGHT / 2 + 40);
+    ctx.fillText('Game Over', BASE_WIDTH / 2, BASE_HEIGHT / 2 - 60);
+    ctx.fillText(`Score: ${Math.floor(score)}`, BASE_WIDTH / 2, BASE_HEIGHT / 2 - 20);
+    ctx.fillText(`High Score: ${highScores[currentMode]}`, BASE_WIDTH / 2, BASE_HEIGHT / 2 + 20);
+    ctx.fillText('Press Spacebar to Restart', BASE_WIDTH / 2, BASE_HEIGHT / 2 + 60);
+
+    ctx.fillStyle = 'blue';
+    ctx.fillRect(300, 300, 200, 50);
+    ctx.fillStyle = 'white';
+    ctx.font = `${20 * UI_SCALE_FACTOR}px Arial`;
+    ctx.fillText('Main Menu', BASE_WIDTH / 2, 330);
 }
 
 function gameLoop(currentTime) {
@@ -219,14 +264,15 @@ function gameLoop(currentTime) {
     requestAnimationFrame(gameLoop);
 }
 
-function startGame() {
+function startGame(mode) {
     gameState = 'PLAYING';
+    currentMode = mode;
     resetGame();
 }
 
 function initialize() {
     init();
-    gameState = 'START';
+    gameState = 'MAIN_MENU';
     lastTime = 0;
     requestAnimationFrame(gameLoop);
 }
