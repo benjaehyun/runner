@@ -3,24 +3,29 @@ const BASE_WIDTH = 800;
 const BASE_HEIGHT = 400;
 let SCALE_FACTOR = 1;
 let UI_SCALE_FACTOR = 1;
-const GRAVITY = 0.4;
-const JUMP_STRENGTH = 14;
-const OBSTACLE_SPEED = 5;
+const GRAVITY = 0.6;
+const JUMP_STRENGTH = 13;
 const CHARACTER_WIDTH = 30;
 const CHARACTER_HEIGHT = 30;
-const MIN_OBSTACLE_DISTANCE = 250;
-const MAX_OBSTACLE_HEIGHT = 50;
-const MIN_OBSTACLE_HEIGHT = 20;
+const MIN_OBSTACLE_DISTANCE = 200;
 const OBSTACLE_WIDTH = 20;
 
 // Game variables
 let canvas, ctx;
 let score, highScores;
-let isJumping, canDoubleJump;
-let lastTime = 0;
-let lastObstaclePosition = 0;
 let gameState = 'MAIN_MENU';
 let currentMode = null;
+let lastTime = 0;
+let gameSpeed = 5; // Start with a slower speed
+let obstacleFrequency = 2.5; // Start with less frequent obstacles
+let difficultyLevel = 1;
+let debugMode = true;
+let consecutiveSameObstacles = 0;
+let lastObstacleType = null;
+
+// FPS Limiting
+const FPS = 60;
+const FRAME_MIN_TIME = (1000/60) * (60 / FPS) - (1000/60) * 0.5;
 
 // Character object
 const character = {
@@ -29,15 +34,17 @@ const character = {
     width: CHARACTER_WIDTH,
     height: CHARACTER_HEIGHT,
     velocityY: 0,
+    isJumping: false,
+    canDoubleJump: false,
     
     jump() {
-        if (!isJumping) {
+        if (!this.isJumping) {
             this.velocityY = -JUMP_STRENGTH;
-            isJumping = true;
-            canDoubleJump = true;
-        } else if (canDoubleJump) {
-            this.velocityY = -JUMP_STRENGTH;
-            canDoubleJump = false;
+            this.isJumping = true;
+            this.canDoubleJump = true;
+        } else if (this.canDoubleJump) {
+            this.velocityY = -JUMP_STRENGTH * 0.9; // Slightly weaker double jump
+            this.canDoubleJump = false;
         }
     },
     
@@ -48,7 +55,8 @@ const character = {
         if (this.y > BASE_HEIGHT - this.height) {
             this.y = BASE_HEIGHT - this.height;
             this.velocityY = 0;
-            isJumping = false;
+            this.isJumping = false;
+            this.canDoubleJump = false;
         }
     },
     
@@ -61,40 +69,113 @@ const character = {
 // Obstacle management
 const obstacles = {
     list: [],
+    types: ['standard', 'tall', 'low', 'moving'],
+    lastObstacleTime: 0,
     
-    generate() {
-        const lastObstacle = this.list[this.list.length - 1];
-        const minDistance = lastObstacle ? lastObstacle.x + MIN_OBSTACLE_DISTANCE : BASE_WIDTH;
-        
-        if (minDistance <= BASE_WIDTH) {
-            const maxJumpableHeight = BASE_HEIGHT - character.height - (JUMP_STRENGTH * JUMP_STRENGTH) / (2 * GRAVITY);
-            const height = Math.floor(Math.random() * (Math.min(MAX_OBSTACLE_HEIGHT, maxJumpableHeight) - MIN_OBSTACLE_HEIGHT + 1)) + MIN_OBSTACLE_HEIGHT;
-            this.list.push({
-                x: BASE_WIDTH,
-                y: BASE_HEIGHT - height,
-                width: OBSTACLE_WIDTH,
-                height: height
-            });
-            lastObstaclePosition = BASE_WIDTH;
+    generate(currentTime) {
+        if (currentTime - this.lastObstacleTime > obstacleFrequency * 1000) {
+            const type = this.getRandomType();
+            const obstacle = this.createObstacle(type);
+            this.list.push(obstacle);
+            this.lastObstacleTime = currentTime;
         }
     },
     
-    update(deltaTime) {
+    getRandomType() {
+        if (score < 10) {
+            return 'standard'; // Ensure standard obstacles for the first 10 seconds
+        }
+
+        let availableTypes = this.types.slice(0, Math.min(difficultyLevel, this.types.length));
+        
+        // Remove the last obstacle type if it has appeared too many times consecutively
+        if (consecutiveSameObstacles >= 3 && availableTypes.length > 1) {
+            availableTypes = availableTypes.filter(type => type !== lastObstacleType);
+        }
+
+        const selectedType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+        
+        if (selectedType === lastObstacleType) {
+            consecutiveSameObstacles++;
+        } else {
+            consecutiveSameObstacles = 1;
+        }
+        
+        lastObstacleType = selectedType;
+        return selectedType;
+    },
+    
+    createObstacle(type) {
+        let height, width;
+        const maxJumpHeight = (JUMP_STRENGTH * JUMP_STRENGTH) / (2 * GRAVITY);
+        const baseHeight = maxJumpHeight * 0.5; // Adjusted for easier clearance
+
+        switch (type) {
+            case 'tall':
+                height = baseHeight * 1.6; // Requires a well-timed double jump
+                width = OBSTACLE_WIDTH;
+                break;
+            case 'low':
+                height = baseHeight * 0.4; // Easy to clear with a single jump
+                width = OBSTACLE_WIDTH * 3;
+                break;
+            case 'moving':
+                height = baseHeight * 0.5; // Challenging but clearable with single jump
+                width = OBSTACLE_WIDTH;
+                break;
+            default: // standard
+                height = baseHeight * 0.8; // Comfortably clearable with a single jump
+                width = OBSTACLE_WIDTH;
+        }
+        
+        return { 
+            x: BASE_WIDTH, 
+            y: BASE_HEIGHT - height, 
+            width, 
+            height, 
+            type 
+        };
+    },
+    
+    update(deltaTime, currentTime) {
         this.list.forEach(obstacle => {
-            obstacle.x -= OBSTACLE_SPEED * (deltaTime / 16);
+            obstacle.x -= gameSpeed * (deltaTime / 16);
+            if (obstacle.type === 'moving') {
+                obstacle.y = BASE_HEIGHT - obstacle.height - Math.sin(currentTime * 0.005) * 30;
+            }
         });
         this.list = this.list.filter(obstacle => obstacle.x > -obstacle.width);
-        
-        if (this.list.length === 0 || lastObstaclePosition <= BASE_WIDTH - MIN_OBSTACLE_DISTANCE) {
-            this.generate();
-        }
+        this.generate(currentTime);
     },
     
+    // draw() {
+    //     this.list.forEach(obstacle => {
+    //         ctx.fillStyle = this.getObstacleColor(obstacle.type);
+    //         ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+    //     });
+    // },
     draw() {
-        ctx.fillStyle = 'red';
         this.list.forEach(obstacle => {
+            ctx.fillStyle = this.getObstacleColor(obstacle.type);
             ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+
+            // Debug: Draw obstacle type
+            if (debugMode) {
+                ctx.fillStyle = 'black';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(obstacle.type, obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height + 15);
+            }
         });
+    },
+    
+    getObstacleColor(type) {
+        switch (type) {
+            case 'tall': return 'darkred';
+            case 'low': return 'orange';
+            case 'moving': return 'purple';
+            default: return 'green'; 
+        }
     }
 };
 
@@ -122,62 +203,95 @@ function init() {
     };
     updateScoreDisplay();
     
-    document.addEventListener('keydown', handleInput);
-    canvas.addEventListener('click', handleClick);
+    setupInputHandlers();
     window.addEventListener('resize', setScaleFactor);
 }
 
-function handleInput(event) {
+function setupInputHandlers() {
+    document.addEventListener('keydown', handleKeyInput);
+    canvas.addEventListener('click', handleClick);
+    canvas.addEventListener('touchstart', handleTouch);
+}
+
+function handleKeyInput(event) {
     if (event.code === 'Space') {
+        event.preventDefault();
         if (gameState === 'PLAYING') {
             character.jump();
         } else if (gameState === 'GAME_OVER') {
             startGame(currentMode);
         }
-        event.preventDefault();
     }
 }
 
 function handleClick(event) {
+    event.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const x = (event.clientX - rect.left) / SCALE_FACTOR;
     const y = (event.clientY - rect.top) / SCALE_FACTOR;
+    handleInteraction(x, y);
+}
 
-    if (gameState === 'MAIN_MENU') {
-        if (x > 200 && x < 350 && y > 200 && y < 250) {
-            startGame('marathon');
-        } else if (x > 450 && x < 600 && y > 200 && y < 250) {
-            startGame('challenge');
-        }
+function handleTouch(event) {
+    event.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.touches[0].clientX - rect.left) / SCALE_FACTOR;
+    const y = (event.touches[0].clientY - rect.top) / SCALE_FACTOR;
+    handleInteraction(x, y);
+}
+
+function handleInteraction(x, y) {
+    if (gameState === 'PLAYING') {
+        character.jump();
     } else if (gameState === 'GAME_OVER') {
+        // Check if the click/touch is on the "Main Menu" button
         if (x > 300 && x < 500 && y > 300 && y < 350) {
-            gameState = 'MAIN_MENU';
+            returnToMainMenu();
+        } else {
+            startGame(currentMode);
+        }
+    } else if (gameState === 'MAIN_MENU') {
+        // Check if click/touch is on Marathon or Challenge button
+        if (y > 200 && y < 250) {
+            if (x > 200 && x < 350) {
+                startGame('marathon');
+            } else if (x > 450 && x < 600) {
+                startGame('challenge');
+            }
         }
     }
 }
 
-function update(deltaTime) {
-    if (gameState !== 'PLAYING') return;
-
-    character.update(deltaTime);
-    obstacles.update(deltaTime);
-    
-    score += deltaTime / 1000;
+function returnToMainMenu() {
+    gameState = 'MAIN_MENU';
+    currentMode = null;
+    resetGame();
     updateScoreDisplay();
-    
-    checkCollisions();
 }
 
-function draw() {
-    ctx.clearRect(0, 0, BASE_WIDTH, BASE_HEIGHT);
+function updateGameState(deltaTime) {
+    if (gameState !== 'PLAYING') return;
 
-    if (gameState === 'MAIN_MENU') {
-        drawMainMenu();
-    } else if (gameState === 'PLAYING') {
-        character.draw();
-        obstacles.draw();
-    } else if (gameState === 'GAME_OVER') {
-        drawGameOverScreen();
+    const currentTime = performance.now();
+    character.update(deltaTime);
+    obstacles.update(deltaTime, currentTime);
+    
+    score += deltaTime / 1000;
+    updateDifficulty();
+    checkCollisions();
+    updateScoreDisplay();
+}
+
+function updateDifficulty() {
+    const baseIncrease = score / 10; // Increased from 250 to 100 for faster progression
+    if (currentMode === 'challenge') {
+        difficultyLevel = Math.floor(score / 15) + 1; // Faster difficulty level increase
+        gameSpeed = Math.min(8, 3 + baseIncrease); // Slightly higher max speed
+        obstacleFrequency = Math.max(0.7, 2.5 - baseIncrease * 0.15); // Faster decrease in obstacle frequency
+    } else {
+        // Marathon mode: slightly faster increase
+        gameSpeed = Math.min(6, 3 + baseIncrease * 0.3);
+        obstacleFrequency = Math.max(1.2, 2.5 - baseIncrease * 0.1);
     }
 }
 
@@ -192,6 +306,13 @@ function checkCollisions() {
     });
 }
 
+function getInitialObstacleType() {
+    if (score < 4) { // For the first 10 seconds, only generate standard obstacles
+        return 'standard';
+    }
+    return obstacles.getRandomType();
+}
+
 function gameOver() {
     gameState = 'GAME_OVER';
     if (score > highScores[currentMode]) {
@@ -202,26 +323,44 @@ function gameOver() {
 
 function resetGame() {
     score = 0;
+    gameSpeed = 3;
+    obstacleFrequency = 2.5;
+    difficultyLevel = 1;
     obstacles.list = [];
     character.y = BASE_HEIGHT - character.height;
     character.velocityY = 0;
-    isJumping = false;
-    canDoubleJump = false;
-    lastObstaclePosition = 0;
+    character.isJumping = false;
+    character.canDoubleJump = true;
+    consecutiveSameObstacles = 0;
+    lastObstacleType = null;
     updateScoreDisplay();
 }
 
 function updateScoreDisplay() {
     document.getElementById('scoreValue').textContent = Math.floor(score);
-    document.getElementById('highScoreMarathon').textContent = highScores.marathon;
-    document.getElementById('highScoreChallenge').textContent = highScores.challenge;
+    document.getElementById('highScoreMarathonValue').textContent = highScores.marathon;
+    document.getElementById('highScoreChallengeValue').textContent = highScores.challenge;
+    document.getElementById('currentMode').textContent = currentMode || 'None';
 }
 
+function draw() {
+    ctx.clearRect(0, 0, BASE_WIDTH, BASE_HEIGHT);
+
+    if (gameState === 'MAIN_MENU') {
+        drawMainMenu();
+    } else if (gameState === 'PLAYING') {
+        character.draw();
+        obstacles.draw();
+        // Remove drawGameInfo() call as we're now using HTML elements for display
+    } else if (gameState === 'GAME_OVER') {
+        drawGameOverScreen();
+    }
+}
 function drawMainMenu() {
     ctx.fillStyle = 'black';
     ctx.font = `${30 * UI_SCALE_FACTOR}px Arial`;
     ctx.textAlign = 'center';
-    ctx.fillText('Choose Game Mode', BASE_WIDTH / 2, 100);
+    ctx.fillText('Side-Scrolling Adventure', BASE_WIDTH / 2, 100);
 
     ctx.fillStyle = 'blue';
     ctx.fillRect(200, 200, 150, 50);
@@ -238,14 +377,18 @@ function drawMainMenu() {
     ctx.fillText(`High Score: ${highScores.challenge}`, 525, 280);
 }
 
+
 function drawGameOverScreen() {
-    ctx.fillStyle = 'black';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, BASE_WIDTH, BASE_HEIGHT);
+
+    ctx.fillStyle = 'white';
     ctx.font = `${30 * UI_SCALE_FACTOR}px Arial`;
     ctx.textAlign = 'center';
     ctx.fillText('Game Over', BASE_WIDTH / 2, BASE_HEIGHT / 2 - 60);
     ctx.fillText(`Score: ${Math.floor(score)}`, BASE_WIDTH / 2, BASE_HEIGHT / 2 - 20);
     ctx.fillText(`High Score: ${highScores[currentMode]}`, BASE_WIDTH / 2, BASE_HEIGHT / 2 + 20);
-    ctx.fillText('Press Spacebar to Restart', BASE_WIDTH / 2, BASE_HEIGHT / 2 + 60);
+    ctx.fillText('Tap or Press Spacebar to Restart', BASE_WIDTH / 2, BASE_HEIGHT / 2 + 60);
 
     ctx.fillStyle = 'blue';
     ctx.fillRect(300, 300, 200, 50);
@@ -254,14 +397,18 @@ function drawGameOverScreen() {
     ctx.fillText('Main Menu', BASE_WIDTH / 2, 330);
 }
 
+
 function gameLoop(currentTime) {
+    requestAnimationFrame(gameLoop);
+    
     const deltaTime = currentTime - lastTime;
+    if (deltaTime < FRAME_MIN_TIME) return;
+    
     lastTime = currentTime;
     
-    update(deltaTime);
+    updateGameState(deltaTime);
     draw();
-    
-    requestAnimationFrame(gameLoop);
+    updateScoreDisplay(); // Update score display every frame
 }
 
 function startGame(mode) {
@@ -277,4 +424,5 @@ function initialize() {
     requestAnimationFrame(gameLoop);
 }
 
+// Start the game
 initialize();
