@@ -43,7 +43,7 @@ const character = {
             this.isJumping = true;
             this.canDoubleJump = true;
         } else if (this.canDoubleJump) {
-            this.velocityY = -JUMP_STRENGTH * 0.9; // Slightly weaker double jump
+            this.velocityY = -JUMP_STRENGTH * 0.9; 
             this.canDoubleJump = false;
         }
     },
@@ -66,7 +66,7 @@ const character = {
     }
 };
 
-// Obstacle management
+// Obstacle object
 const obstacles = {
     list: [],
     types: ['standard', 'tall', 'low', 'moving'],
@@ -83,12 +83,11 @@ const obstacles = {
     
     getRandomType() {
         if (score < 10) {
-            return 'standard'; // Ensure standard obstacles for the first 10 seconds
+            return 'standard';
         }
 
         let availableTypes = this.types.slice(0, Math.min(difficultyLevel, this.types.length));
         
-        // Remove the last obstacle type if it has appeared too many times consecutively
         if (consecutiveSameObstacles >= 3 && availableTypes.length > 1) {
             availableTypes = availableTypes.filter(type => type !== lastObstacleType);
         }
@@ -108,23 +107,23 @@ const obstacles = {
     createObstacle(type) {
         let height, width;
         const maxJumpHeight = (JUMP_STRENGTH * JUMP_STRENGTH) / (2 * GRAVITY);
-        const baseHeight = maxJumpHeight * 0.5; // Adjusted for easier clearance
+        const baseHeight = maxJumpHeight * 0.5;
 
         switch (type) {
             case 'tall':
-                height = baseHeight * 1.6; // Requires a well-timed double jump
+                height = baseHeight * 1.6; 
                 width = OBSTACLE_WIDTH;
                 break;
             case 'low':
-                height = baseHeight * 0.4; // Easy to clear with a single jump
+                height = baseHeight * 0.4; 
                 width = OBSTACLE_WIDTH * 3;
                 break;
             case 'moving':
-                height = baseHeight * 0.5; // Challenging but clearable with single jump
+                height = baseHeight * 0.5; 
                 width = OBSTACLE_WIDTH;
                 break;
             default: // standard
-                height = baseHeight * 0.8; // Comfortably clearable with a single jump
+                height = baseHeight * 0.8; // comfortably clearable with a single jump
                 width = OBSTACLE_WIDTH;
         }
         
@@ -147,25 +146,11 @@ const obstacles = {
         this.list = this.list.filter(obstacle => obstacle.x > -obstacle.width);
         this.generate(currentTime);
     },
-    
-    // draw() {
-    //     this.list.forEach(obstacle => {
-    //         ctx.fillStyle = this.getObstacleColor(obstacle.type);
-    //         ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
-    //     });
-    // },
+
     draw() {
         this.list.forEach(obstacle => {
             ctx.fillStyle = this.getObstacleColor(obstacle.type);
             ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
-
-            // Debug: Draw obstacle type
-            if (debugMode) {
-                ctx.fillStyle = 'black';
-                ctx.font = '12px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(obstacle.type, obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height + 15);
-            }
         });
     },
     
@@ -283,13 +268,12 @@ function updateGameState(deltaTime) {
 }
 
 function updateDifficulty() {
-    const baseIncrease = score / 10; // Increased from 250 to 100 for faster progression
+    const baseIncrease = score / 10; // Progression speed
     if (currentMode === 'challenge') {
         difficultyLevel = Math.floor(score / 15) + 1; // Faster difficulty level increase
         gameSpeed = Math.min(8, 3 + baseIncrease); // Slightly higher max speed
         obstacleFrequency = Math.max(0.7, 2.5 - baseIncrease * 0.15); // Faster decrease in obstacle frequency
     } else {
-        // Marathon mode: slightly faster increase
         gameSpeed = Math.min(6, 3 + baseIncrease * 0.3);
         obstacleFrequency = Math.max(1.2, 2.5 - baseIncrease * 0.1);
     }
@@ -307,7 +291,7 @@ function checkCollisions() {
 }
 
 function getInitialObstacleType() {
-    if (score < 4) { // For the first 10 seconds, only generate standard obstacles
+    if (score < 4) {
         return 'standard';
     }
     return obstacles.getRandomType();
@@ -351,7 +335,6 @@ function draw() {
     } else if (gameState === 'PLAYING') {
         character.draw();
         obstacles.draw();
-        // Remove drawGameInfo() call as we're now using HTML elements for display
     } else if (gameState === 'GAME_OVER') {
         drawGameOverScreen();
     }
@@ -360,7 +343,7 @@ function drawMainMenu() {
     ctx.fillStyle = 'black';
     ctx.font = `${30 * UI_SCALE_FACTOR}px Arial`;
     ctx.textAlign = 'center';
-    ctx.fillText('Side-Scrolling Adventure', BASE_WIDTH / 2, 100);
+    ctx.fillText('runner', BASE_WIDTH / 2, 100);
 
     ctx.fillStyle = 'blue';
     ctx.fillRect(200, 200, 150, 50);
@@ -408,7 +391,7 @@ function gameLoop(currentTime) {
     
     updateGameState(deltaTime);
     draw();
-    updateScoreDisplay(); // Update score display every frame
+    updateScoreDisplay(); // update score every frame
 }
 
 function startGame(mode) {
@@ -424,5 +407,5 @@ function initialize() {
     requestAnimationFrame(gameLoop);
 }
 
-// Start the game
+
 initialize();
